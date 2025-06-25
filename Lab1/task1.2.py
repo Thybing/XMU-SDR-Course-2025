@@ -6,25 +6,29 @@ import matplotlib.pyplot as plt
 
 def normalized_shifted_cross_correlation(sig, L):
     N = len(sig)
+
     result_len = N - 2 * L + 1
     if result_len <= 0:
         raise ValueError("Signal too short for given L")
 
-    r_n = np.zeros(result_len)
-    for i in range(result_len):
-        part1 = sig[i: i + L]
-        part2 = sig[i + L: i + 2 * L]
-        numerator = np.abs(np.sum(part1 * np.conj(part2)))
+    sig = np.asarray(sig)
+    part1 = sig[:N - L]
+    part2 = sig[L:]
 
-        energy1 = np.sum(np.abs(part1) ** 2)
-        energy2 = np.sum(np.abs(part2) ** 2)
+    # 滑动窗口内积（相关项）
+    prod = part1 * np.conj(part2)
+    numerator = np.convolve(prod, np.ones(L, dtype=prod.dtype), mode='valid')
 
-        denominator = np.sqrt(energy1 * energy2)
+    # 滑动能量（模长平方和）
+    energy1 = np.abs(part1) ** 2
+    energy2 = np.abs(part2) ** 2
+    energy1_sum = np.convolve(energy1, np.ones(L), mode='valid')
+    energy2_sum = np.convolve(energy2, np.ones(L), mode='valid')
 
-        if denominator != 0:
-            r_n[i] = numerator / denominator
-        else:
-            r_n[i] = 0.0
+    denominator = np.sqrt(energy1_sum * energy2_sum)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        r_n = np.abs(numerator) / denominator
+        r_n[np.isnan(r_n)] = 0.0  # 避免除零出现 nan
 
     return r_n
 
@@ -59,7 +63,7 @@ signalA = 0.1 * noise
 signalB = 0.1 * noise
 preamble_start_idx = 321
 signalB[preamble_start_idx:preamble_start_idx + len(preamble)] += preamble
-# np.testing.assert_equal(detect_preamble_auto_correlation(signalA, short_preamble_length), None)
+np.testing.assert_equal(detect_preamble_auto_correlation(signalA, short_preamble_length), None)
 np.testing.assert_equal(
     detect_preamble_auto_correlation(signalB, short_preamble_length) in range(preamble_start_idx - 5,
                                                                               preamble_start_idx + 5), True)
