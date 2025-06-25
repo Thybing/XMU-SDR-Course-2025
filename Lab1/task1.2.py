@@ -3,34 +3,62 @@ import numpy as np
 from matplotlib import pyplot
 import matplotlib.pyplot as plt
 
+import numpy as np
+
+
+# def shifted_cross_correlation(sig, L):
+#     sig = np.asarray(sig)
+#     N = len(sig)
+#     result_len = N - 2 * L + 1
+#
+#     if result_len <= 0:
+#         raise ValueError("Signal too short for given L")
+#
+#     c = np.zeros(result_len, dtype=np.complex128)
+#     for i in range(result_len):
+#         x = sig[i:i + L]
+#         y = sig[i + L:i + 2 * L]
+#         c[i] = np.sum(x * np.conj(y))
+#
+#     return c
+#
+#
+# def half_normalized_shifted_cross_correlation(sig, L):
+#     sig = np.asarray(sig)
+#     N = len(sig)
+#     result_len = N - 2 * L + 1
+#
+#     if result_len <= 0:
+#         raise ValueError("Signal too short for given L")
+#
+#     c = np.zeros(result_len, dtype=np.complex128)
+#     for i in range(result_len):
+#         x = sig[i:i + L]
+#         y = sig[i + L:i + 2 * L]
+#         numerator = np.sum(x * np.conj(y))
+#         denominator = np.sum(np.abs(x) ** 2)
+#         c[i] = np.abs(numerator) / denominator if denominator != 0 else 0.0
+#
+#     return c
+
 
 def normalized_shifted_cross_correlation(sig, L):
+    sig = np.asarray(sig)
     N = len(sig)
-
     result_len = N - 2 * L + 1
+
     if result_len <= 0:
         raise ValueError("Signal too short for given L")
 
-    sig = np.asarray(sig)
-    part1 = sig[:N - L]
-    part2 = sig[L:]
+    c = np.zeros(result_len, dtype=np.complex128)
+    for i in range(result_len):
+        x = sig[i:i + L]
+        y = sig[i + L:i + 2 * L]
+        numerator = np.sum(x * np.conj(y))
+        denominator = np.sqrt(np.sum(np.abs(x) ** 2) * np.sum(np.abs(y) ** 2))
+        c[i] = np.abs(numerator) / denominator if denominator != 0 else 0.0
 
-    # 滑动窗口内积（相关项）
-    prod = part1 * np.conj(part2)
-    numerator = np.convolve(prod, np.ones(L, dtype=prod.dtype), mode='valid')
-
-    # 滑动能量（模长平方和）
-    energy1 = np.abs(part1) ** 2
-    energy2 = np.abs(part2) ** 2
-    energy1_sum = np.convolve(energy1, np.ones(L), mode='valid')
-    energy2_sum = np.convolve(energy2, np.ones(L), mode='valid')
-
-    denominator = np.sqrt(energy1_sum * energy2_sum)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        r_n = np.abs(numerator) / denominator
-        r_n[np.isnan(r_n)] = 0.0  # 避免除零出现 nan
-
-    return r_n
+    return c
 
 
 def detect_preamble_auto_correlation(signal, short_preamble_len):
