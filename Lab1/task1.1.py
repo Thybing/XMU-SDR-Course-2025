@@ -4,22 +4,6 @@ from matplotlib import pyplot
 import matplotlib.pyplot as plt
 
 
-def complex_xcorr(arr, sub):
-    arr = np.asarray(arr, dtype=np.complex128)
-    sub = np.asarray(sub, dtype=np.complex128)
-    N = len(arr)
-    M = len(sub)
-    ret_len = N - M + 1
-    if ret_len <= 0:
-        raise ValueError("sub is longer than arr")
-
-    ret = np.zeros(ret_len, dtype=np.complex128)
-    conj_sub = np.conj(sub)
-    for i in range(ret_len):
-        ret[i] = np.sum(arr[i:i + M] * conj_sub)
-    return ret
-
-
 def normalized_complex_xcorr(arr, sub):
     arr = np.asarray(arr, dtype=np.complex128)
     sub = np.asarray(sub, dtype=np.complex128)
@@ -37,7 +21,7 @@ def normalized_complex_xcorr(arr, sub):
 
     for i in range(ret_len):
         arr_slice = arr[i:i + M]
-        ret[i] = np.sum(arr_slice * conj_sub)
+        ret[i] = np.sqrt(np.abs(np.sum(arr_slice * conj_sub)) ** 2)
         arr_norm[i] = np.sqrt(np.sum(np.abs(arr_slice) ** 2))
 
     # 归一化，防止除以零
