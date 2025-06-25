@@ -35,9 +35,11 @@ def normalized_shifted_cross_correlation(sig, L):
 
 def detect_preamble_auto_correlation(signal, short_preamble_len):
     c_n = normalized_shifted_cross_correlation(signal, short_preamble_len)
+    threshold = 0.95
 
     plt.figure(figsize=(10, 4))
     plt.plot(np.abs(c_n), label='|c_n| (normalized correlation)', color='blue')
+    plt.axhline(y=threshold, color='r', linestyle='--', label='Threshold')
     plt.title("Normalized Shifted Cross Correlation")
     plt.xlabel("Sample index")
     plt.ylabel("Normalized |c_n|")
@@ -46,7 +48,6 @@ def detect_preamble_auto_correlation(signal, short_preamble_len):
     plt.tight_layout()
     plt.show()
 
-    threshold = 0.95
     for i, val in enumerate(c_n):
         if val > threshold:
             return i

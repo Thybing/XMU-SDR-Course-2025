@@ -25,9 +25,12 @@ def detect_preamble_by_sliding_window(signal, short_preamble_len):
     max_value = np.max(m)
     max_index = np.argmax(m)
 
+    threshold = 30
+
     # 画图
     plt.figure(figsize=(10, 4))
     plt.plot(m, label=f'Energy Window Sum (window size={short_preamble_len})')
+    plt.axhline(y=threshold, color='r', linestyle='--', label='Threshold')
     plt.xlabel('Sample index')
     plt.ylabel('Energy sum')
     plt.title('Sliding Window Energy Sum')
@@ -36,7 +39,6 @@ def detect_preamble_by_sliding_window(signal, short_preamble_len):
     plt.tight_layout()
     plt.show()
 
-    threshold = 30
     if max_value > threshold:
         return max_index + short_preamble_len
 

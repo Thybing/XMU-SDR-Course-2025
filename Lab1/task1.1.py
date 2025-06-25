@@ -1,6 +1,8 @@
 import math
 import numpy as np
 from matplotlib import pyplot
+import matplotlib.pyplot as plt
+
 
 def complex_xcorr(arr, sub):
     arr = np.asarray(arr, dtype=np.complex128)
@@ -14,8 +16,9 @@ def complex_xcorr(arr, sub):
     ret = np.zeros(ret_len, dtype=np.complex128)
     conj_sub = np.conj(sub)
     for i in range(ret_len):
-        ret[i] = np.sum(arr[i:i+M] * conj_sub)
+        ret[i] = np.sum(arr[i:i + M] * conj_sub)
     return ret
+
 
 def normalized_complex_xcorr(arr, sub):
     arr = np.asarray(arr, dtype=np.complex128)
@@ -27,15 +30,15 @@ def normalized_complex_xcorr(arr, sub):
         raise ValueError("sub is longer than arr")
 
     conj_sub = np.conj(sub)
-    sub_norm = np.sqrt(np.sum(np.abs(sub)**2))  # sub的范数，固定值
+    sub_norm = np.sqrt(np.sum(np.abs(sub) ** 2))  # sub的范数，固定值
 
     ret = np.zeros(ret_len, dtype=np.complex128)
     arr_norm = np.zeros(ret_len, dtype=np.float64)
 
     for i in range(ret_len):
-        arr_slice = arr[i:i+M]
+        arr_slice = arr[i:i + M]
         ret[i] = np.sum(arr_slice * conj_sub)
-        arr_norm[i] = np.sqrt(np.sum(np.abs(arr_slice)**2))
+        arr_norm[i] = np.sqrt(np.sum(np.abs(arr_slice) ** 2))
 
     # 归一化，防止除以零
     denom = sub_norm * arr_norm
@@ -44,10 +47,23 @@ def normalized_complex_xcorr(arr, sub):
     p_n = ret / denom
     return p_n
 
+
 # Compare the correlation magnitude against this value to determine whether there is a preamble or not
 def detect_preamble_cross_correlation(preamble, signal):
     m_n = normalized_complex_xcorr(signal, preamble)
     threshold = 0.9
+
+    plt.figure(figsize=(10, 4))
+    plt.plot(m_n.real, label='Cross-correlation coefficient')
+    plt.axhline(y=threshold, color='r', linestyle='--', label='Threshold')
+    plt.title('Cross-correlation Coefficient vs. Sample Index')
+    plt.xlabel('Sample Index')
+    plt.ylabel('Correlation Coefficient')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
     for i, val in enumerate(m_n):
         if val > threshold:
             return i

@@ -10,9 +10,12 @@ def calc_energy(sig):
 
 def detect_preamble_by_energy(signal):
     energy = calc_energy(signal)
+    energy_threshold = 1
+
     # 绘图
     plt.figure(figsize=(10, 4))
     plt.plot(energy, color='purple', label='|sig[i]|² (energy)')
+    plt.axhline(y=energy_threshold, color='r', linestyle='--', label='Threshold')
     plt.title("Signal Energy per Sample")
     plt.xlabel("Sample index")
     plt.ylabel("Energy")
@@ -21,7 +24,6 @@ def detect_preamble_by_energy(signal):
     plt.tight_layout()
     plt.show()
 
-    energy_threshold = 1
     for i, val in enumerate(energy):
         if val > energy_threshold:
             return i
