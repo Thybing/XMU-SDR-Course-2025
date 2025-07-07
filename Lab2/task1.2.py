@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import detect_preamble
 
 preamble_lts = np.load("./Lab2_data/preamble_lts.npy")
 preamble_sts = np.load("./Lab2_data/preamble_sts.npy")
@@ -8,66 +9,14 @@ rx_signal = np.load('Lab2_data/recorded_signal_strong.npy')  # 加载 .npy 文�
 len_lts = len(preamble_lts)  # 64
 len_sts = len(preamble_sts)  # 16
 
-
-def normalized_complex_xcorr(arr, sub):
-    arr = np.asarray(arr, dtype=np.complex128)
-    sub = np.asarray(sub, dtype=np.complex128)
-    N = len(arr)
-    M = len(sub)
-    ret_len = N - M + 1
-    if ret_len <= 0:
-        raise ValueError("sub is longer than arr")
-
-    conj_sub = np.conj(sub)
-    sub_norm = np.sqrt(np.sum(np.abs(sub) ** 2))  # sub的范数，固定值
-
-    ret = np.zeros(ret_len, dtype=np.complex128)
-    arr_norm = np.zeros(ret_len, dtype=np.float64)
-
-    for i in range(ret_len):
-        arr_slice = arr[i:i + M]
-        ret[i] = np.sqrt(np.abs(np.sum(arr_slice * conj_sub)) ** 2)
-        arr_norm[i] = np.sqrt(np.sum(np.abs(arr_slice) ** 2))
-
-    # 归一化，防止除以零
-    denom = sub_norm * arr_norm
-    denom[denom == 0] = 1e-15
-
-    p_n = ret / denom
-    return p_n
-
-
-# Compare the correlation magnitude against this value to determine whether there is a preamble or not
-def detect_preamble_cross_correlation(preamble, signal):
-    m_n = normalized_complex_xcorr(signal, preamble)
-    threshold = 0.78
-
-    plt.figure(figsize=(10, 4))
-    plt.plot(m_n.real, label='Cross-correlation coefficient')
-    plt.axhline(y=threshold, color='r', linestyle='--', label='Threshold')
-    plt.title('Cross-correlation Coefficient vs. Sample Index')
-    plt.xlabel('Sample Index')
-    plt.ylabel('Correlation Coefficient')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-    starts = []
-    resume_threshold = 300
-    last_cnt = -resume_threshold
-
-    for i, val in enumerate(m_n):
-        if val > threshold and i >= last_cnt + resume_threshold:
-            starts.append(i)
-            last_cnt = i
-    return starts
-
-
-sts_starts = detect_preamble_cross_correlation(preamble_sts, rx_signal)
+sts_starts = detect_preamble.detect_preamble_cross_correlation(preamble_sts, rx_signal, plots=True)
 print(sts_starts)
 
+data_pack_index = 0
 for sts_start in sts_starts:
+    print(f"find ofdm data pack : {data_pack_index}")
+    data_pack_index += 1
+
     lts_signal = rx_signal[sts_start + len_sts * 10: sts_start + len_sts * 10 + int(len_lts * 2.5)]
 
     # CFO补偿
@@ -247,8 +196,8 @@ for sts_start in sts_starts:
     num_errors = np.sum(raw_data != demod_bits)
 
     # 计算误码率
-    ber = num_errors / length
+    ber = num_errors / length * 100
 
     print(f"比特长度: {length}")
     print(f"错误比特数: {num_errors}")
-    print(f"比特误码率 (BER): {ber:.6f}")
+    print(f"比特误码率 (BER): {ber:.6f}%")
