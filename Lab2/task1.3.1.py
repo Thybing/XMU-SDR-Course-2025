@@ -192,3 +192,6 @@ for sts_start in sts_starts:
 
     print(f"比特长度: {length}")
     print(demod_bits[:20])
+
+    if data_pack_index == 1:
+        np.save("10sym_data.npy", demod_bits)
