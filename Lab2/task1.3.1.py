@@ -18,6 +18,8 @@ for sts_start in sts_starts:
     print(f"find ofdm data pack : {data_pack_index}")
     data_pack_index += 1
 
+    num_symbol = 10
+
     lts_signal = rx_signal[sts_start + len_sts * 10: sts_start + len_sts * 10 + int(len_lts * 2.5)]
 
     # CFO补偿
@@ -34,7 +36,8 @@ for sts_start in sts_starts:
     angle_diff = np.angle(product)
     cfo_est = angle_diff / (2 * np.pi * lts_segment_len)  # 单位是 归一化频偏（弧度/采样点）
 
-    frame_signal = rx_signal[sts_start: sts_start + 1920]
+    frame_signal = rx_signal[sts_start: sts_start + 320 + 80 * num_symbol]
+
     # 4. CFO补偿
     time_vec = np.arange(len(frame_signal))  # 时间轴（采样点）
     correction = np.exp(-1j * 2 * np.pi * cfo_est * time_vec)
@@ -45,13 +48,12 @@ for sts_start in sts_starts:
 
     ofdm_data_symbols = frame_compensated[
                         len_sts * 10 + int(len_lts * 2.5):  len_sts * 10 + int(
-                            len_lts * 2.5) + 80 * 20]
+                            len_lts * 2.5) + 80 * num_symbol]
 
     # FFT
     n = 64
     cp_len = 16
     sym_len = n + cp_len
-    num_symbol = 10
 
     freq_domain_symbols = []
     for i in range(num_symbol):
