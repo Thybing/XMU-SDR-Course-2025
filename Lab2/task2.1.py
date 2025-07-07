@@ -1,0 +1,251 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import detect_preamble
+from Lab2.detect_preamble import detect_preamble_cross_correlation
+
+preamble_lts = np.load("./Lab2_data/preamble_lts.npy")
+preamble_sts = np.load("./Lab2_data/preamble_sts.npy")
+rx_signal = np.load('Lab2_data/recorded_signal_100sym.npy')  # 加载 .npy 文件
+
+len_lts = len(preamble_lts)  # 64
+len_sts = len(preamble_sts)  # 16
+
+sts_starts = detect_preamble.detect_preamble_cross_correlation(preamble_sts, rx_signal)
+print("data_pack_starts:", end='')
+print(sts_starts)
+
+data_pack_index = 0
+for sts_start in sts_starts:
+    print(f"find ofdm data pack : {data_pack_index}")
+    data_pack_index += 1
+
+    num_symbol = 100
+
+    lts_signal = rx_signal[sts_start + len_sts * 10: sts_start + len_sts * 10 + int(len_lts * 2.5)]
+
+    # CFO补偿
+    num_sts = 10
+    sts_len = 16
+    lts_segment_len = 64
+    lts_len_total = 160  # 实际LTS段长度（含GI、CP等）
+
+    lts1 = lts_signal[32: 32 + len_lts]
+    lts2 = lts_signal[32 + len_lts: 32 + len_lts * 2]
+
+    # 3. CFO估计：基于两段LTS的相位差
+    product = np.sum(lts1 * np.conj(lts2))
+    angle_diff = np.angle(product)
+    cfo_est = angle_diff / (2 * np.pi * lts_segment_len)  # 单位是 归一化频偏（弧度/采样点）
+
+    frame_signal = rx_signal[sts_start: sts_start + 320 + 80 * num_symbol]
+    # 4. CFO补偿
+    time_vec = np.arange(len(frame_signal))  # 时间轴（采样点）
+    correction = np.exp(-1j * 2 * np.pi * cfo_est * time_vec)
+    frame_compensated = frame_signal * correction
+
+    sts_signal = frame_compensated[: len_sts * 10]
+    lts_signal = frame_compensated[len_sts * 10: + len_sts * 10 + int(len_lts * 2.5)]
+
+    ofdm_data_symbols = frame_compensated[
+                        len_sts * 10 + int(len_lts * 2.5):  len_sts * 10 + int(
+                            len_lts * 2.5) + 80 * num_symbol]
+
+    # FFT
+    n = 64
+    cp_len = 16
+    sym_len = n + cp_len
+
+    freq_domain_symbols = []
+    for i in range(num_symbol):
+        start = i * sym_len + cp_len
+        end = start + n
+        time_domain_symbol = ofdm_data_symbols[start:end]
+        freq_symbol = np.fft.fft(time_domain_symbol, n)
+        freq_domain_symbols.append(freq_symbol)
+
+    freq_domain_symbols = np.array(freq_domain_symbols).T  # shape: (64, 20)
+
+    # 使用lts进行信道估计,计算出H
+
+    lts1 = lts_signal[32: 32 + len_lts]
+    lts2 = lts_signal[32 + len_lts: 32 + len_lts * 2]
+
+    ideal_lts = preamble_lts[:len_lts]
+
+    rx_lts1_freq = np.fft.fft(lts1, len_lts)
+    rx_lts2_freq = np.fft.fft(lts2, len_lts)
+    ideal_lts_freq = np.fft.fft(ideal_lts, len_lts)
+    # H_est 是之前你计算得到的信道频率响应 (长度 64 的复数数组)
+
+    # 平均两个接收 LTS，抗噪声
+    rx_lts_avg_freq = (rx_lts1_freq + rx_lts2_freq) / 2
+
+    # 避免除以 0：仅对有效子载波做估计
+    H_est = np.zeros(n, dtype=complex)
+    valid = np.abs(ideal_lts_freq) > 1e-6
+
+    H_est[valid] = rx_lts_avg_freq[valid] / ideal_lts_freq[valid]
+
+    if data_pack_index == 1:
+        N = 64  # 子载波数量（FFT大小）
+
+        # 中心对齐（频率移位）
+        H_shifted = np.fft.fftshift(H_est)
+
+        # 生成对称频率索引（X轴）
+        subcarriers = np.fft.fftshift(np.arange(-N // 2, N // 2))
+
+        # 幅度和相位
+        magnitude = np.abs(H_shifted)
+        phase = np.angle(H_shifted)
+
+        # 绘图
+        plt.figure(figsize=(12, 4))
+
+        # 幅度响应
+        plt.subplot(1, 2, 1)
+        plt.stem(subcarriers, magnitude, use_line_collection=True)
+        plt.title("Channel Magnitude Response (via LTS)")
+        plt.xlabel("Subcarrier Index (Frequency)")
+        plt.ylabel("|H[k]|")
+        plt.grid(True)
+
+        # 相位响应
+        plt.subplot(1, 2, 2)
+        plt.stem(subcarriers, phase, use_line_collection=True)
+        plt.title("Channel Phase Response (via LTS)")
+        plt.xlabel("Subcarrier Index (Frequency)")
+        plt.ylabel("∠H[k] (radians)")
+        plt.grid(True)
+
+        plt.tight_layout()
+        plt.show()
+
+    # 均衡后的频域符号
+    equalized_symbols = np.zeros_like(freq_domain_symbols, dtype=complex)
+    valid = np.abs(H_est) > 1e-6  # 避免除以0
+    equalized_symbols[valid, :] = freq_domain_symbols[valid, :] / H_est[valid, np.newaxis]
+
+    n = 64  # FFT 点数
+    num_symbol = equalized_symbols.shape[1]  # OFDM 符号数
+
+    # 子载波索引（基于你给的频率映射）
+    data_subcarriers = np.array(
+        list(range(1, 7)) +
+        list(range(8, 21)) +
+        list(range(22, 27)) +
+        list(range(38, 43)) +
+        list(range(44, 57)) +
+        list(range(58, 64))
+    )
+    pilot_subcarriers = np.array([7, 21, 43, 57])
+    idle_subcarriers = np.array([0] + list(range(27, 38)))  # DC+空闲
+
+    # 1. 信道均衡
+    valid = np.abs(H_est) > 1e-6
+    equalized_symbols = np.zeros_like(freq_domain_symbols, dtype=complex)
+    equalized_symbols[valid, :] = freq_domain_symbols[valid, :] / H_est[valid, np.newaxis]
+
+    # 导频子载波位置（标准802.11）
+    pilot_indices = np.array([7, 21, 43, 57])
+
+    if data_pack_index == 1:
+        pilot_idx = 7  # 你可以试试 7、21、43、57
+
+        # Step 3: 提取该子载波在所有 OFDM 符号上的相位
+        pilot_phases = np.angle(equalized_symbols[pilot_idx, :])  # shape: (num_symbols,)
+        symbol_indices = np.arange(equalized_symbols.shape[1])
+
+        # Step 4: 绘图
+        plt.figure(figsize=(8, 4))
+        plt.stem(symbol_indices, pilot_phases, use_line_collection=True)
+        plt.title(f"Phase Evolution of Pilot Subcarrier {pilot_idx} Over OFDM Symbols")
+        plt.xlabel("OFDM Symbol Index")
+        plt.ylabel("Phase (radians)")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+    if data_pack_index == 1:
+        num_subcarriers = 64
+        all_indices = np.arange(num_subcarriers)
+
+        # 准备画图
+        plt.figure(figsize=(12, 4))
+
+        for i, sym_idx in enumerate([0, 9, 19]):
+            # Step 1: 获取该 OFDM 符号上的导频相位
+            pilot_phase = np.angle(equalized_symbols[pilot_indices, sym_idx])
+
+            # Step 2: 插值 - 线性插值扩展到 64 个子载波
+            interpolated_phase = np.interp(all_indices, pilot_indices, pilot_phase)
+
+            # Step 3: 绘图
+            plt.subplot(1, 3, i + 1)
+            plt.plot(all_indices, interpolated_phase, marker='o')
+            plt.title(f"OFDM Symbol #{sym_idx + 1}")
+            plt.xlabel("Subcarrier Index")
+            plt.ylabel("Estimated Phase (radians)")
+            plt.grid(True)
+
+        plt.tight_layout()
+        plt.suptitle("Interpolated Phase Using Pilots (Symbols 1 / 10 / 20)", fontsize=14, y=1.05)
+        plt.show()
+
+    # 已知导频值（BPSK）
+    pilot_known = np.array([1, 1, 1, -1])
+
+    # 5.2 估计每个符号的相位偏差（从导频）
+    # shape: (4, num_symbols)
+    pilot_received = equalized_symbols[pilot_indices, :]
+
+    # 每个 pilot 的相位误差 = 角度差（received / known）
+    # broadcasting: pilot_known[:, np.newaxis] 是 shape (4, 1)
+    pilot_phase_errors = np.angle(pilot_received / pilot_known[:, np.newaxis])  # shape: (4, num_symbols)
+
+    # 5.3 在频域上插值出 64 个子载波的相位误差
+    # 初始化结果：相位偏差矩阵，shape (64, num_symbols)
+    subcarrier_phase_offsets = np.zeros_like(equalized_symbols, dtype=float)
+
+    for sym_idx in range(equalized_symbols.shape[1]):
+        # 当前符号对应的导频相位
+        phi = pilot_phase_errors[:, sym_idx]
+
+        # 插值到 64 个子载波（线性插值）
+        subcarrier_phase_offsets[:, sym_idx] = np.interp(
+            np.arange(64),  # 所有子载波索引
+            pilot_indices,  # 导频索引
+            phi  # 导频相位
+        )
+
+    # 5.4 相位补偿
+    # 生成复数补偿因子并作用于 equalized_symbols
+    phase_correction = np.exp(-1j * subcarrier_phase_offsets)
+    equalized_symbols = equalized_symbols * phase_correction
+
+    # 2. 提取数据子载波
+    data_symbols = equalized_symbols[data_subcarriers, :]  # (48, num_symbol)
+
+    # 3. 拼接所有数据子载波（按时间序列排列）
+    data_all = data_symbols.T.flatten()
+
+    if data_pack_index == 1:
+        plt.figure(figsize=(6, 6))
+        plt.plot(data_all.real, data_all.imag, 'bo', markersize=2)
+        plt.axhline(0, color='gray', linewidth=0.5)
+        plt.axvline(0, color='gray', linewidth=0.5)
+        plt.title("Constellation of Data Subcarriers (After Equalization + Phase Correction)")
+        plt.xlabel("In-Phase")
+        plt.ylabel("Quadrature")
+        plt.grid(True)
+        plt.axis("equal")
+        plt.tight_layout()
+        plt.show()
+
+    # 4. BPSK 解调
+    demod_bits = (data_all.real > 0).astype(np.uint8)
+
+    length = len(demod_bits)
+
+    print(f"比特长度: {length}")
+    print(demod_bits[:20])
